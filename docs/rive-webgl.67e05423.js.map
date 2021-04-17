@@ -1,1 +1,0 @@
-{"version":3,"sources":["index.js"],"names":["console","log"],"mappings":";AAAAA,QAAQC,IAAI","file":"rive-webgl.67e05423.js","sourceRoot":"..","sourcesContent":["console.log('hello world');"]}
