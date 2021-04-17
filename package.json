@@ -4,13 +4,20 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "parcel index.html",
+    "start": "parcel index.html -d docs",
     "build": "parcel build index.html -d docs --public-url ."
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "parcel-bundler": "^1.12.5"
-  }
+    "dat.gui": "^0.7.7",
+    "parcel-bundler": "^1.12.5",
+    "rive-canvas": "^0.7.2",
+    "twgl.js": "^4.19.1"
+  },
+  "dependencies": {
+    "parcel-plugin-asset-copier": "^1.1.0"
+  },
+  "assetsPath": "assets"
 }
