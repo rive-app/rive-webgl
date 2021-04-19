@@ -11,6 +11,7 @@ import GLRenderPath from './src/gl_render_path.js';
 import GLRenderPaint from './src/gl_render_paint.js';
 
 const files = [
+    'star_with_gradient_rect.riv',
     'star.riv',
     'clipped_circle_star_2.riv',
     'clipped_circle_star.riv',

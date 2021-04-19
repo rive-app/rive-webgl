@@ -337,17 +337,16 @@ export default {
         twgl.drawBufferInfo(gl, contourBufferInfo);
     },
 
-    cover(renderer, transform) {
+    cover(renderer, transform, programInfo) {
         if (this._paths) {
             for (const path of this._paths) {
-                path.p.cover(renderer, m2d.mul(m2d.init(), transform, path.m));
+                path.p.cover(renderer, m2d.mul(m2d.init(), transform, path.m), programInfo);
             }
             return;
         }
         const {
             gl,
-            projection,
-            programInfo
+            projection
         } = renderer;
 
         const uniforms = {

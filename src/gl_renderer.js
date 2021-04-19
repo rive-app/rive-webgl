@@ -58,6 +58,51 @@ export default {
                 data: [0, 1, 2, 2, 3, 0]
             }
         });
+
+        // Solid color cover.
+
+        this.solidColorProgram = twgl.createProgramInfo(gl, [
+            `
+  attribute vec2 position;
+  uniform mat4 projection;
+  uniform mat4 transform;
+  
+  void main(void) {
+    gl_Position = projection*transform*vec4(position, 0.0, 1.0);
+  }`,
+            `
+  precision highp float;
+  uniform vec4 color;
+  
+  void main() {
+    gl_FragColor = color;
+  }`
+        ]);
+
+        this.radialGradientProgram = twgl.createProgramInfo(gl, [
+            `
+  attribute vec2 position;
+  uniform mat4 projection;
+  uniform mat4 transform;
+  varying vec2 pos;
+  
+  void main(void) {
+    gl_Position = projection*transform*vec4(position, 0.0, 1.0);
+    pos = position;
+  }`,
+            `
+  precision highp float;
+  uniform vec4 color;
+  uniform vec2 start;
+  uniform vec2 end;
+  uniform sampler2D gradient;
+  varying vec2 pos;
+
+  void main() {
+      // /*color */
+      gl_FragColor = texture2D(gradient, vec2(0.0, distance(start, pos)/distance(start, end)));
+  }`
+        ]);
     },
     save() {
         this.stack.push({
@@ -206,7 +251,7 @@ export default {
 
             twgl.drawBufferInfo(gl, screenBlitBuffer);
         } else {
-            path.cover(this, transform);
+            path.cover(this, transform, programInfo);
         }
 
         // Let further ops know we're clipping.
@@ -252,7 +297,7 @@ export default {
         // If we're clipping, compare again only the lower 7 bits.
         gl.stencilFunc(gl.NOTEQUAL, 0, isClipping ? 0x7F : 0xFF);
         gl.stencilOp(gl.ZERO, gl.ZERO, gl.ZERO);
-        path.cover(this, this._transform);
+        paint.draw(this, path);
 
         const uniforms = {
             projection: this.projection,
