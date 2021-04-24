@@ -11,6 +11,12 @@ import GLRenderPath from './src/gl_render_path.js';
 import GLRenderPaint from './src/gl_render_paint.js';
 
 const files = [
+    'jc_emoji.riv',
+    'control.riv',
+    'knight_square_2.riv',
+
+
+    'star_gradient_squish.riv',
     'star_complex_gradient.riv',
     'star_with_gradient_rect.riv',
     'star.riv',

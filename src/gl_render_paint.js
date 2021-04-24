@@ -8,20 +8,20 @@ function colorToBuffer(value) {
 
 
 function colorRed(value) {
-    return (0x00ff0000 & value) >> 16;
+    return (0x00ff0000 & value) >>> 16;
 }
 
 function colorGreen(value) {
-    return (0x0000ff00 & value) >> 8;
+    return (0x0000ff00 & value) >>> 8;
 }
 
 function colorBlue(value) {
-    return (0x000000ff & value) >> 0;
+    return (0x000000ff & value) >>> 0;
 }
 
 function colorAlpha(value) {
     // stupid way to cast to uint8 since JS does bitwise ops as signed integers.
-    return new Uint8Array([(0xff000000 & value) >> 24])[0];
+    return (0xff000000 & value) >>> 24;
 }
 
 
@@ -34,6 +34,11 @@ class SolidColor {
         this.color = color;
         this.programInfo = renderer.solidColorProgram;
     }
+
+    get renders() {
+        return colorAlpha(this.color) > 0;
+    }
+
     bind(renderer) {
         const {
             gl
@@ -49,12 +54,17 @@ class SolidColor {
     }
 }
 
-class RadialGradient {
+class LinearGradient {
     constructor(builder, renderer, color) {
         this.color = color;
-        this.programInfo = renderer.radialGradientProgram;
+        this.programInfo = renderer.linearGradientProgram;
         this.builder = builder;
-        this.buildTexture(renderer, builder);
+        // this.buildTexture(renderer, builder);
+        this.build(renderer, builder);
+    }
+
+    get renders() {
+        return colorAlpha(this.color) > 0;
     }
 
     updateGradient(renderer, builder) {
@@ -62,7 +72,8 @@ class RadialGradient {
         const lastBuilder = this.builder;
         if (lastBuilder._stops.length != builder._stops.length) {
             // Lengths differ, don't bother checking rest, just update the texture.
-            this.buildTexture(renderer, builder);
+            // this.buildTexture(renderer, builder);
+            this.build(renderer, builder);
         } else {
             const stopsFrom = lastBuilder._stops;
             const stopsTo = builder._stops;
@@ -70,12 +81,33 @@ class RadialGradient {
             // Check individual stop and color values, if any aren't the same, update the texture.
             for (let i = 0; i < length; i++) {
                 if (stopsFrom[i].color != stopsTo[i].color || stopsFrom[i].stop != stopsTo[i].stop) {
-                    this.buildTexture(renderer, builder);
+                    // this.buildTexture(renderer, builder);
+                    this.build(renderer, builder);
                     break;
                 }
             }
         }
         this.builder = builder;
+    }
+
+    build(renderer, builder) {
+        const colors = [];
+        const stops = [];
+        for (let {
+                color,
+                stop
+            } of builder._stops) {
+            let r = colorRed(color);
+            let g = colorGreen(color);
+            let b = colorBlue(color);
+            let a = colorAlpha(color);
+            colors.push(r / 255, g / 255, b / 255, a / 255);
+            stops.push(stop);
+        }
+
+        this._colors = new Float32Array(colors);
+        this._stops = new Float32Array(stops);
+        this._count = builder._stops.length;
     }
 
     buildTexture(renderer, builder) {
@@ -141,15 +173,28 @@ class RadialGradient {
         } = renderer;
         const {
             programInfo,
-            color
+            color,
+            _colors,
+            _stops,
+            _count,
         } = this;
         gl.useProgram(programInfo.program);
         twgl.setUniforms(programInfo, {
             start: [this.builder._sx, this.builder._sy],
             end: [this.builder._ex, this.builder._ey],
             color: colorToBuffer(color),
+            colors: _colors,
+            stops: _stops,
+            count: _count,
             gradient: this.texture,
         });
+    }
+}
+
+class RadialGradient extends LinearGradient {
+    constructor(builder, renderer, color) {
+        super(builder, renderer, color);
+        this.programInfo = renderer.radialGradientProgram;
     }
 }
 
@@ -171,6 +216,9 @@ class GradientBuilder {
 }
 
 class LinearGradientBuilder extends GradientBuilder {
+    makePainter(renderer, color) {
+        return new LinearGradient(this, renderer, color);
+    }
 
 }
 
@@ -191,7 +239,9 @@ export default {
     thickness: function (value) {},
     join: function (value) {},
     cap: function (value) {},
-    style: function (value) {},
+    style: function (value) {
+        this._style = value;
+    },
     blendMode: function (value) {},
     linearGradient: function (sx, sy, ex, ey) {
         this._gradientBuilder = new LinearGradientBuilder(sx, sy, ex, ey);
@@ -207,11 +257,7 @@ export default {
         this._painter = null;
     },
 
-    draw: function (renderer, path) {
-        const {
-            _transform
-        } = renderer;
-
+    prepDraw: function (renderer) {
         let {
             _painter
         } = this;
@@ -231,6 +277,14 @@ export default {
             _painter.updateGradient(renderer, this._gradientBuilder);
         }
         _painter.color = this._color;
+        return _painter.renders;
+    },
+
+    draw: function (renderer, path) {
+        const {
+            _transform
+        } = renderer;
+
         this._painter.bind(renderer);
 
         path.cover(renderer, _transform, this._painter.programInfo);

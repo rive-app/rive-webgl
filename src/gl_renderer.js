@@ -6,7 +6,8 @@ export default {
         this.__parent.__construct.call(this);
         let gl = canvas.getContext('webgl', {
             stencil: true,
-            antialias: true
+            antialias: true,
+            premultipliedAlpha: false,
         });
         this.gl = gl;
         this._transform = m2d.init();
@@ -75,7 +76,7 @@ export default {
   uniform vec4 color;
   
   void main() {
-    gl_FragColor = color;
+    gl_FragColor = vec4(color.rgb*color.a, color.a);
   }`
         ]);
 
@@ -84,23 +85,94 @@ export default {
   attribute vec2 position;
   uniform mat4 projection;
   uniform mat4 transform;
+  uniform mat4 localTransform;
   varying vec2 pos;
   
   void main(void) {
     gl_Position = projection*transform*vec4(position, 0.0, 1.0);
-    pos = position;
+    pos = (localTransform*vec4(position, 0.0, 1.0)).xy;
   }`,
             `
   precision highp float;
   uniform vec4 color;
   uniform vec2 start;
   uniform vec2 end;
-  uniform sampler2D gradient;
+  uniform int count;
+  uniform vec4 colors[16];
+  uniform float stops[16];
+
   varying vec2 pos;
 
   void main() {
-      // /*color */
-      gl_FragColor = texture2D(gradient, vec2(0.0, distance(start, pos)/distance(start, end)));
+    float f = distance(start, pos)/distance(start, end);
+
+    gl_FragColor = mix(
+        colors[0], 
+        colors[1], 
+        smoothstep( stops[0], stops[1], f ) 
+    );
+    for ( int i=1; i<15; ++i ) {
+        if(i >= count-1) 
+        {
+            break;
+        }
+        gl_FragColor = mix(
+                            gl_FragColor, 
+                            colors[i+1], 
+                            smoothstep( stops[i], stops[i+1], f ) 
+                        );
+    }
+    float alpha = gl_FragColor.w * color.w;
+    gl_FragColor = vec4(gl_FragColor.xyz*alpha, alpha);
+  }`
+        ]);
+        this.linearGradientProgram = twgl.createProgramInfo(gl, [
+            `
+  attribute vec2 position;
+  uniform mat4 projection;
+  uniform mat4 transform;
+  uniform mat4 localTransform;
+  varying vec2 pos;
+  
+  
+  void main(void) {
+    gl_Position = projection*transform*vec4(position, 0.0, 1.0);
+    pos = (localTransform*vec4(position, 0.0, 1.0)).xy;
+  }`,
+            `
+  precision highp float;
+  uniform vec4 color;
+  uniform vec2 start;
+  uniform vec2 end;
+  uniform int count;
+  uniform vec4 colors[16];
+  uniform float stops[16];
+
+  varying vec2 pos;
+
+  void main() {
+    vec2 toEnd = end - start;
+    float lengthSquared = toEnd.x*toEnd.x+toEnd.y*toEnd.y;
+    float f = dot(pos - start, toEnd)/lengthSquared;
+
+    gl_FragColor = mix(
+        colors[0], 
+        colors[1], 
+        smoothstep( stops[0], stops[1], f ) 
+    );
+    for ( int i=1; i<15; ++i ) {
+        if(i >= count-1) 
+        {
+            break;
+        }
+        gl_FragColor = mix(
+                            gl_FragColor, 
+                            colors[i+1], 
+                            smoothstep( stops[i], stops[i+1], f ) 
+                        );
+    }
+    float alpha = gl_FragColor.w * color.w;
+    gl_FragColor = vec4(gl_FragColor.xyz*alpha, alpha);
   }`
         ]);
     },
@@ -132,6 +204,10 @@ export default {
 
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
         this.appliedClips = [];
         this.isClippingDirty = false;
         this.projection = twgl.m4.ortho(
@@ -258,6 +334,11 @@ export default {
         this.isClipping = true;
     },
     drawPath(path, paint) {
+
+        // Don't draw strokes for now.
+        if (paint._style.value != 1 || !paint.prepDraw(this)) {
+            return;
+        }
         if (this.isClippingDirty) {
             this._applyClipping();
         }
@@ -298,11 +379,6 @@ export default {
         gl.stencilFunc(gl.NOTEQUAL, 0, isClipping ? 0x7F : 0xFF);
         gl.stencilOp(gl.ZERO, gl.ZERO, gl.ZERO);
         paint.draw(this, path);
-
-        const uniforms = {
-            projection: this.projection,
-            transform: m2d.mat4(m2d.init())
-        };
     },
     clipPath(path) {
         this.clipPaths.push({
