@@ -11,6 +11,7 @@ export default {
     __construct() {
         this._commands = [];
         this.__parent.__construct.call(this);
+        this._isDirty = true;
     },
     reset() {
         this._isDirty = true;
@@ -312,6 +313,7 @@ export default {
             projection: projection,
             transform: m2d.mat4(transform)
         };
+
         if (this._isDirty) {
             const {
                 contour,
@@ -322,8 +324,7 @@ export default {
         }
 
         const {
-            contourBufferInfo,
-            coverBufferInfo
+            contourBufferInfo
         } = this;
         if (!contourBufferInfo) {
             return;
@@ -337,10 +338,10 @@ export default {
         twgl.drawBufferInfo(gl, contourBufferInfo);
     },
 
-    cover(renderer, transform, programInfo) {
+    cover(renderer, transform, programInfo, localTransform) {
         if (this._paths) {
             for (const path of this._paths) {
-                path.p.cover(renderer, m2d.mul(m2d.init(), transform, path.m), programInfo);
+                path.p.cover(renderer, m2d.mul(m2d.init(), transform, path.m), programInfo, path.m);
             }
             return;
         }
@@ -353,11 +354,29 @@ export default {
             projection: projection,
             transform: m2d.mat4(transform)
         };
+        if (localTransform) {
+            uniforms.localTransform = m2d.mat4(localTransform);
+        } else {
+            uniforms.localTransform = m2d.mat4(m2d.init());
+        }
         if (this._isDirty) {
             const {
                 contour,
                 cover
             } = this.computeContour();
+
+            const {
+                contourBufferInfo,
+                coverBufferInfo
+            } = this;
+            if (contourBufferInfo) {
+                gl.deleteBuffer(contourBufferInfo.attributes.position);
+                gl.deleteBuffer(contourBufferInfo.indices);
+            }
+            if (coverBufferInfo) {
+                gl.deleteBuffer(coverBufferInfo.attributes.position);
+                gl.deleteBuffer(coverBufferInfo.indices);
+            }
             this.contourBufferInfo = twgl.createBufferInfoFromArrays(gl, contour);
             this.coverBufferInfo = twgl.createBufferInfoFromArrays(gl, cover);
         }
