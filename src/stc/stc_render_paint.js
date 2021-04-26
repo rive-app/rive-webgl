@@ -59,12 +59,12 @@ class LinearGradient {
         this.color = color;
         this.programInfo = renderer.linearGradientProgram;
         this.builder = builder;
-        // this.buildTexture(renderer, builder);
+        this.isVisible = false;
         this.build(renderer, builder);
     }
 
     get renders() {
-        return colorAlpha(this.color) > 0;
+        return this.isVisible;
     }
 
     updateGradient(renderer, builder) {
@@ -91,6 +91,7 @@ class LinearGradient {
     }
 
     build(renderer, builder) {
+        let isVisible = false;
         const colors = [];
         const stops = [];
         for (let {
@@ -101,6 +102,9 @@ class LinearGradient {
             let g = colorGreen(color);
             let b = colorBlue(color);
             let a = colorAlpha(color);
+            if (a > 0) {
+                isVisible = true;
+            }
             colors.push(r / 255, g / 255, b / 255, a / 255);
             stops.push(stop);
         }
@@ -108,6 +112,7 @@ class LinearGradient {
         this._colors = new Float32Array(colors);
         this._stops = new Float32Array(stops);
         this._count = builder._stops.length;
+        this.isVisible = isVisible;
     }
 
     buildTexture(renderer, builder) {
