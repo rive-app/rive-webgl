@@ -1,8 +1,10 @@
 import * as twgl from 'twgl.js';
-import m2d from './m2d.js';
+import m2d from '../m2d.js';
 
 export default {
-    __construct(canvas) {
+    __construct(canvas, clipArtboard, contourError) {
+        this.contourError = contourError;
+        this._clipArtboard = clipArtboard;
         this.__parent.__construct.call(this);
         let gl = canvas.getContext('webgl', {
             stencil: true,
@@ -15,7 +17,6 @@ export default {
         this.clipPaths = [];
         this.appliedClips = [];
         this.isClippingDirty = false;
-
         // Setup simple program
         this.programInfo = twgl.createProgramInfo(gl, [
             `
@@ -245,30 +246,30 @@ export default {
         }
         // Always clear the set clip
         const {
-            gl
+            gl,
+            _clipArtboard,
         } = this;
+        gl.enable(gl.STENCIL_TEST);
         gl.stencilMask(0xFF);
-        gl.stencilFunc(gl.ALWAYS, 0x0, 0xFF);
-        gl.stencilOp(gl.ZERO, gl.ZERO, gl.ZERO);
+        gl.clear(gl.STENCIL_BUFFER_BIT);
+
         gl.colorMask(false, false, false, false);
 
-        const {
-            clearScreenProgramInfo,
-            screenBlitBuffer
-        } = this;
-        gl.useProgram(clearScreenProgramInfo.program);
-
-        twgl.setBuffersAndAttributes(gl, clearScreenProgramInfo, screenBlitBuffer);
-
-        twgl.drawBufferInfo(gl, screenBlitBuffer);
         this.isClipping = false;
 
         // Go and applied clipping paths.
-        if (clipPaths.length > 0) {
+        if (clipPaths.length > (_clipArtboard ? 0 : 1)) {
+            let first = true;
             for (const {
                     path,
                     transform
                 } of clipPaths) {
+                if (first) {
+                    first = false;
+                    if (!_clipArtboard) {
+                        continue;
+                    }
+                }
                 this._applyClipPath(path, transform);
             }
         }
@@ -292,8 +293,6 @@ export default {
             gl.stencilFunc(gl.ALWAYS, 0x0, 0xFF);
         }
 
-        gl.colorMask(false, false, false, false);
-
         gl.stencilOpSeparate(gl.FRONT, gl.KEEP, gl.KEEP, gl.INCR_WRAP);
         gl.stencilOpSeparate(gl.BACK, gl.KEEP, gl.KEEP, gl.DECR_WRAP);
 
@@ -304,8 +303,6 @@ export default {
             // Will be set by paths individually...
         }
         path.stencil(this, transform, 0, isEvenOdd);
-
-        gl.colorMask(false, false, false, false);
 
         // Fail when not equal to 0 and replace with 0x80 (mark high bit as included in clip). Require stencil mask (write mask) of 0xFF and stencil func mask of 0x7F such that the comparison looks for 0 but write 0x80.
         gl.stencilMask(0xFF);

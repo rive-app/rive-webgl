@@ -1,5 +1,5 @@
 import * as twgl from 'twgl.js';
-import m2d from './m2d.js';
+import m2d from '../m2d.js';
 
 const PathCommand = {
     move: 0,
@@ -66,7 +66,9 @@ export default {
     },
     // Build the subdivided contour of the path. This should can be used as the
     // buffer for the fill and the guide for the stroke.
-    computeContour() {
+    computeContour(contourError) {
+        const minSegmentLength = contourError * contourError;
+        const distTooFar = contourError;
         this._isDirty = false;
         // Seed vertices with the "out of bounds" point which we'll update
         // later, this is the origin from which we'll draw our triangles that
@@ -145,9 +147,6 @@ export default {
                     .concat(d2)
                     .concat([lerp(d2[0], d2[2], t), lerp(d2[1], d2[3], t)]);
             }
-
-            const minSegmentLength = 1.0 * 1.0;
-            const distTooFar = 1.0;
 
             function tooFar(ax, ay, bx, by) {
                 return Math.max(Math.abs(ax - bx), Math.abs(ay - by)) > distTooFar;
@@ -318,7 +317,7 @@ export default {
             const {
                 contour,
                 cover
-            } = this.computeContour();
+            } = this.computeContour(renderer.contourError);
             this.contourBufferInfo = twgl.createBufferInfoFromArrays(gl, contour);
             this.coverBufferInfo = twgl.createBufferInfoFromArrays(gl, cover);
         }
