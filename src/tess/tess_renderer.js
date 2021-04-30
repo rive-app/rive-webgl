@@ -7,6 +7,9 @@ export default {
         this._clipArtboard = clipArtboard;
         this.__parent.__construct.call(this);
         let gl = canvas.getContext('webgl', {
+            powerPreference: 'high-performance',
+            preserveDrawingBuffer: true,
+            alpha: true,
             stencil: true,
             antialias: true,
             premultipliedAlpha: false,
@@ -141,6 +144,8 @@ export default {
         gl.disable(gl.CULL_FACE);
 
         gl.enable(gl.STENCIL_TEST);
+        gl.stencilMask(0xFF);
+
 
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
@@ -168,7 +173,9 @@ export default {
             for (let i = 0; i < clipPaths.length; i++) {
                 const cA = clipPaths[i];
                 const cB = appliedClips[i];
-                if (cA.path != cB.path || !m2d.same(cA.transform, cB.transform)) {
+                // We don't need to actually check the transform because it's
+                // always world space and it won't change for the path instance.
+                if (cA.path !== cB.path) {
                     same = false;
                     break;
                 }
@@ -189,64 +196,82 @@ export default {
             programInfo,
         } = this;
 
+        gl.enable(gl.STENCIL_TEST);
+        gl.colorMask(false, false, false, false);
+        gl.stencilFunc(gl.ALWAYS, 0x0, 0xFF);
 
-        // Go and applied clipping paths.
+        // Let's erase any clips that are no longer in the mask
+        gl.stencilOp(gl.KEEP, gl.KEEP, gl.DECR);
 
-        if (clipPaths.length > (_clipArtboard ? 0 : 1)) {
-            let first = true;
-            gl.enable(gl.STENCIL_TEST);
+        // Figure out which paths need to be removed from clip.
+        const alreadyApplied = new Set();
 
-            gl.colorMask(false, false, false, false);
-            gl.clear(gl.STENCIL_BUFFER_BIT);
-            gl.stencilMask(0xFF);
-            gl.stencilFunc(gl.ALWAYS, 0x0, 0xFF);
-            gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
-
-
-            for (const {
-                    path,
-                    transform
-                } of clipPaths) {
-                if (first) {
-                    first = false;
-                    if (!_clipArtboard) {
-                        continue;
-                    }
+        // TODO: Gotta fix up this nonesense by letting the rive-cpp artboard
+        // draw method take an argument for whether to clip the artboard or not.
+        let first = true;
+        for (const {
+                path: appliedPath,
+                transform
+            } of appliedClips) {
+            if (first) {
+                first = false;
+                if (!_clipArtboard) {
+                    continue;
                 }
-                path.drawMesh(this, transform, programInfo);
+            }
+            let remove = true;
+            for (let i = 0; i < clipPaths.length; i++) {
+                const {
+                    path
+                } = clipPaths[i];
+                if (appliedPath === path) {
+                    // This path is still in the clipping set so don't remove it.
+                    remove = false;
+                    alreadyApplied.add(path);
+                    break;
+                }
+            }
+            if (remove) {
+                // Delete it from the clipping region (we set DECR in stencilOp).
+                appliedPath.drawMesh(this, transform, programInfo);
+            }
+        }
+
+        // Now increment as we add to the clip mask.
+        gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
+        first = true;
+        for (const {
+                path,
+                transform
+            } of clipPaths) {
+            if (first) {
+                first = false;
+                if (!_clipArtboard) {
+                    continue;
+                }
             }
 
-            this.appliedClips = clipPaths.slice();
-            // Further drawing will only pass if it matches the total clipping
-            // shapes drawn.
-            gl.stencilFunc(gl.EQUAL, this.appliedClips.length - (_clipArtboard ? 0 : 1), 0xFF);
-            gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
-            gl.colorMask(true, true, true, true);
+            if (alreadyApplied.has(path)) {
+                // This clip was previously applied and is still in our set.
+                continue;
+            }
 
+            path.drawMesh(this, transform, programInfo);
+
+        }
+
+        if (clipPaths.length > (_clipArtboard ? 0 : 1)) {
+            gl.stencilFunc(gl.EQUAL, clipPaths.length - (_clipArtboard ? 0 : 1), 0xFF);
+            gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
             this.isClipping = true;
         } else {
             gl.disable(gl.STENCIL_TEST);
             this.isClipping = false;
         }
 
+        gl.colorMask(true, true, true, true);
 
-
-
-        // // Setup further rendering after applying the clip.
-        // if (this.isClipping) {
-        //     gl.enable(gl.STENCIL_TEST);
-        //     // Pass only if that 8th bit is set. This allows us to write our new
-        //     // winding into the lower 7 bits.
-        //     gl.stencilFunc(gl.EQUAL, this.appliedClips.length, 0xFF);
-
-        // } else {
-        //     // No need to use the stencil test if there's no clipping
-        //     gl.disable(gl.STENCIL_TEST);
-        // }
-
-        // gl.colorMask(true, true, true, true);
-
-        // gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+        this.appliedClips = clipPaths.slice();
     },
 
     _applyClipPath(path, transform) {

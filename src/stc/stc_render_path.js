@@ -304,12 +304,10 @@ export default {
         }
         const {
             gl,
-            projection,
             programInfo
         } = renderer;
 
         const uniforms = {
-            projection: projection,
             transform: m2d.mat4(transform)
         };
 
@@ -345,12 +343,10 @@ export default {
             return;
         }
         const {
-            gl,
-            projection
+            gl
         } = renderer;
 
         const uniforms = {
-            projection: projection,
             transform: m2d.mat4(transform)
         };
         if (localTransform) {

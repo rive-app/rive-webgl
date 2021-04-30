@@ -7,6 +7,9 @@ export default {
         this._clipArtboard = clipArtboard;
         this.__parent.__construct.call(this);
         let gl = canvas.getContext('webgl', {
+            powerPreference: 'high-performance',
+            preserveDrawingBuffer: true,
+            alpha: true,
             stencil: true,
             antialias: true,
             premultipliedAlpha: false,
@@ -17,23 +20,6 @@ export default {
         this.clipPaths = [];
         this.appliedClips = [];
         this.isClippingDirty = false;
-        // Setup simple program
-        this.programInfo = twgl.createProgramInfo(gl, [
-            `
-  attribute vec2 position;
-  uniform mat4 projection;
-  uniform mat4 transform;
-  
-  void main(void) {
-    gl_Position = projection*transform*vec4(position, 0.0, 1.0);
-  }`,
-            `
-  precision highp float;
-  
-  void main() {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-  }`
-        ]);
 
         this.clearScreenProgramInfo = twgl.createProgramInfo(gl, [
             `
@@ -61,27 +47,7 @@ export default {
             }
         });
 
-        // Solid color cover.
-
-        this.solidColorProgram = twgl.createProgramInfo(gl, [
-            `
-  attribute vec2 position;
-  uniform mat4 projection;
-  uniform mat4 transform;
-  
-  void main(void) {
-    gl_Position = projection*transform*vec4(position, 0.0, 1.0);
-  }`,
-            `
-  precision highp float;
-  uniform vec4 color;
-  
-  void main() {
-    gl_FragColor = vec4(color.rgb*color.a, color.a);
-  }`
-        ]);
-
-        this.radialGradientProgram = twgl.createProgramInfo(gl, [
+        this.programInfo = twgl.createProgramInfo(gl, [
             `
   attribute vec2 position;
   uniform mat4 projection;
@@ -101,79 +67,69 @@ export default {
   uniform int count;
   uniform vec4 colors[16];
   uniform float stops[16];
+  uniform int fillType;
 
   varying vec2 pos;
 
-  void main() {
-    float f = distance(start, pos)/distance(start, end);
-
-    gl_FragColor = mix(
-        colors[0], 
-        colors[1], 
-        smoothstep( stops[0], stops[1], f ) 
-    );
-    for ( int i=1; i<15; ++i ) {
-        if(i >= count-1) 
-        {
-            break;
-        }
-        gl_FragColor = mix(
-                            gl_FragColor, 
-                            colors[i+1], 
-                            smoothstep( stops[i], stops[i+1], f ) 
-                        );
+  void main() 
+  {
+    if(fillType == 0) 
+    {
+        // solid
+        gl_FragColor = vec4(color.rgb*color.a, color.a);
     }
-    float alpha = gl_FragColor.w * color.w;
-    gl_FragColor = vec4(gl_FragColor.xyz*alpha, alpha);
-  }`
-        ]);
-        this.linearGradientProgram = twgl.createProgramInfo(gl, [
-            `
-  attribute vec2 position;
-  uniform mat4 projection;
-  uniform mat4 transform;
-  uniform mat4 localTransform;
-  varying vec2 pos;
-  
-  
-  void main(void) {
-    gl_Position = projection*transform*vec4(position, 0.0, 1.0);
-    pos = (localTransform*vec4(position, 0.0, 1.0)).xy;
-  }`,
-            `
-  precision highp float;
-  uniform vec4 color;
-  uniform vec2 start;
-  uniform vec2 end;
-  uniform int count;
-  uniform vec4 colors[16];
-  uniform float stops[16];
+    else if(fillType == 1)
+    {
+        // linear
+        vec2 toEnd = end - start;
+        float lengthSquared = toEnd.x*toEnd.x+toEnd.y*toEnd.y;
+        float f = dot(pos - start, toEnd)/lengthSquared;
 
-  varying vec2 pos;
-
-  void main() {
-    vec2 toEnd = end - start;
-    float lengthSquared = toEnd.x*toEnd.x+toEnd.y*toEnd.y;
-    float f = dot(pos - start, toEnd)/lengthSquared;
-
-    gl_FragColor = mix(
-        colors[0], 
-        colors[1], 
-        smoothstep( stops[0], stops[1], f ) 
-    );
-    for ( int i=1; i<15; ++i ) {
-        if(i >= count-1) 
-        {
-            break;
-        }
         gl_FragColor = mix(
-                            gl_FragColor, 
-                            colors[i+1], 
-                            smoothstep( stops[i], stops[i+1], f ) 
-                        );
+            colors[0], 
+            colors[1], 
+            smoothstep( stops[0], stops[1], f ) 
+        );
+        for ( int i=1; i<15; ++i ) 
+        {
+            if(i >= count-1) 
+            {
+                break;
+            }
+            gl_FragColor = mix(
+                                gl_FragColor, 
+                                colors[i+1], 
+                                smoothstep( stops[i], stops[i+1], f ) 
+                            );
+        }
+        float alpha = gl_FragColor.w;
+        gl_FragColor = vec4(gl_FragColor.xyz*alpha, alpha);
     }
-    float alpha = gl_FragColor.w * color.w;
-    gl_FragColor = vec4(gl_FragColor.xyz*alpha, alpha);
+    else if(fillType == 2) 
+    {
+        // radial
+        float f = distance(start, pos)/distance(start, end);
+
+        gl_FragColor = mix(
+            colors[0], 
+            colors[1], 
+            smoothstep( stops[0], stops[1], f ) 
+        );
+        for ( int i=1; i<15; ++i ) 
+        {
+            if(i >= count-1) 
+            {
+                break;
+            }
+            gl_FragColor = mix(
+                                gl_FragColor, 
+                                colors[i+1], 
+                                smoothstep( stops[i], stops[i+1], f ) 
+                            );
+        }
+        float alpha = gl_FragColor.w;
+        gl_FragColor = vec4(gl_FragColor.xyz*alpha, alpha);
+    }
   }`
         ]);
     },
@@ -195,9 +151,10 @@ export default {
     },
     startFrame() {
         const {
-            gl
+            gl,
+            programInfo,
         } = this;
-
+        gl.useProgram(programInfo.program);
         gl.disable(gl.DEPTH_TEST);
         gl.disable(gl.CULL_FACE);
 
@@ -219,6 +176,10 @@ export default {
             0,
             1
         );
+
+        twgl.setUniforms(programInfo, {
+            projection: this.projection
+        });
     },
 
     _applyClipping() {
@@ -282,7 +243,7 @@ export default {
             programInfo,
             isClipping
         } = this;
-        gl.useProgram(programInfo.program);
+        // gl.useProgram(programInfo.program);
         if (isClipping) {
             // When clipping we want to write only to the last/lower 7 bits as our high 8th bit is used to mark clipping inclusion.
             gl.stencilMask(0x7F);
@@ -309,6 +270,8 @@ export default {
         gl.stencilFunc(gl.NOTEQUAL, 0x80, 0x7F);
         gl.stencilOp(gl.ZERO, gl.ZERO, gl.REPLACE);
         if (isClipping) {
+            // gl.clearStencil(0x80);
+            // gl.clear(gl.STENCIL_BUFFER_BIT);
             // We were already clipping, we should "cover" the combined area of the previous clip and this one, for now we blit the whole frame buffer.
             const {
                 clearScreenProgramInfo,
@@ -323,6 +286,7 @@ export default {
             );
 
             twgl.drawBufferInfo(gl, screenBlitBuffer);
+            gl.useProgram(programInfo.program);
         } else {
             path.cover(this, transform, programInfo);
         }
@@ -345,7 +309,7 @@ export default {
             isClipping
         } = this;
 
-        gl.useProgram(programInfo.program);
+        // gl.useProgram(programInfo.program);
 
         if (isClipping) {
             // When clipping we want to write only to the last/lower 7 bits as our high 8th bit is used to mark clipping inclusion.

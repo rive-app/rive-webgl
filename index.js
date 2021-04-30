@@ -7,7 +7,6 @@ import riveCanvas, {
     RenderPath
 } from 'rive-canvas';
 import createTess2Wasm from 'tess2-wasm';
-import * as twgl from 'twgl.js';
 
 import StcRenderer from './src/stc/stc_renderer.js';
 import StcRenderPath from './src/stc/stc_render_path.js';
@@ -18,8 +17,8 @@ import TessRenderPath from './src/tess/tess_render_path.js';
 import TessRenderPaint from './src/tess/tess_render_paint.js';
 
 const files = [
-    'jc_emoji.riv',
     'marty_v2.riv',
+    'jc_emoji.riv',
 
     'control.riv',
     'knight_square_2.riv',
@@ -87,7 +86,7 @@ async function main() {
             }
         };
 
-        let selectedRenderer = renderers.StencilThenCover;
+        let selectedRenderer = renderers.Tessellation;
 
 
         let file = null;
@@ -95,7 +94,7 @@ async function main() {
         let animation = null;
         let enableWebGL = true;
         let enableCanvas = true;
-        let clipArtboard = true;
+        let clipArtboard = false;
         let contourQuality = 0.8888888888888889;
 
         const maxContourError = 5;

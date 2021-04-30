@@ -54,15 +54,13 @@ class SolidColor {
 class LinearGradient {
     constructor(builder, renderer, color) {
         this.color = color;
-        this.programInfo = renderer.linearGradientProgram;
         this.builder = builder;
         this.isVisible = false;
-        // this.buildTexture(renderer, builder);
         this.build(renderer, builder);
     }
 
     get renders() {
-        return this.isVisible; //colorAlpha(this.color) > 0;
+        return this.isVisible;
     }
 
     updateGradient(renderer, builder) {
@@ -179,14 +177,11 @@ class LinearGradient {
             programInfo
         } = renderer;
         const {
-
-            color,
             _colors,
             _stops,
             _count,
             fillType,
         } = this;
-        // gl.useProgram(programInfo.program);
         twgl.setUniforms(programInfo, {
             start: [this.builder._sx, this.builder._sy],
             end: [this.builder._ex, this.builder._ey],
@@ -204,7 +199,6 @@ class RadialGradient extends LinearGradient {
     }
     constructor(builder, renderer, color) {
         super(builder, renderer, color);
-        this.programInfo = renderer.radialGradientProgram;
     }
 }
 
@@ -297,6 +291,5 @@ export default {
         this._painter.bind(renderer);
 
         path.drawMesh(renderer, _transform, renderer.programInfo);
-        // path.cover(renderer, _transform, this._painter.programInfo);
     }
 }

@@ -32,7 +32,6 @@ function lerpChannel(a, b, mix) {
 class SolidColor {
     constructor(renderer, color) {
         this.color = color;
-        this.programInfo = renderer.solidColorProgram;
     }
 
     get renders() {
@@ -41,14 +40,13 @@ class SolidColor {
 
     bind(renderer) {
         const {
-            gl
+            programInfo
         } = renderer;
         const {
-            programInfo,
             color
         } = this;
-        gl.useProgram(programInfo.program);
         twgl.setUniforms(programInfo, {
+            fillType: 0,
             color: colorToBuffer(color)
         });
     }
@@ -57,7 +55,6 @@ class SolidColor {
 class LinearGradient {
     constructor(builder, renderer, color) {
         this.color = color;
-        this.programInfo = renderer.linearGradientProgram;
         this.builder = builder;
         this.isVisible = false;
         this.build(renderer, builder);
@@ -172,34 +169,38 @@ class LinearGradient {
         this.texture = textures.gradient;
     }
 
+    get fillType() {
+        return 1;
+    }
+
     bind(renderer) {
         const {
-            gl
+            programInfo
         } = renderer;
         const {
-            programInfo,
-            color,
             _colors,
             _stops,
             _count,
         } = this;
-        gl.useProgram(programInfo.program);
+
         twgl.setUniforms(programInfo, {
             start: [this.builder._sx, this.builder._sy],
             end: [this.builder._ex, this.builder._ey],
-            color: colorToBuffer(color),
             colors: _colors,
             stops: _stops,
             count: _count,
             gradient: this.texture,
+            fillType: this.fillType
         });
     }
 }
 
 class RadialGradient extends LinearGradient {
+    get fillType() {
+        return 2;
+    }
     constructor(builder, renderer, color) {
         super(builder, renderer, color);
-        this.programInfo = renderer.radialGradientProgram;
     }
 }
 
@@ -287,11 +288,12 @@ export default {
 
     draw: function (renderer, path) {
         const {
-            _transform
+            _transform,
+            programInfo
         } = renderer;
 
         this._painter.bind(renderer);
 
-        path.cover(renderer, _transform, this._painter.programInfo);
+        path.cover(renderer, _transform, programInfo);
     }
 }

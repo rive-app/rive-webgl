@@ -79,31 +79,8 @@ export default {
             }
             return;
         }
-        const {
-            gl
-        } = renderer;
         if (this._isDirty) {
-            const {
-                contour,
-                cover
-            } = this.computeContour(renderer.contourError);
-
-            const {
-                contourBufferInfo,
-                coverBufferInfo
-            } = this;
-
-            if (contourBufferInfo) {
-                gl.deleteBuffer(contourBufferInfo.attribs.position.buffer);
-                gl.deleteBuffer(contourBufferInfo.indices);
-            }
-            if (coverBufferInfo) {
-                gl.deleteBuffer(coverBufferInfo.attribs.position.buffer);
-                gl.deleteBuffer(coverBufferInfo.indices);
-            }
-
-            this.contourBufferInfo = twgl.createBufferInfoFromArrays(gl, contour);
-            this.coverBufferInfo = twgl.createBufferInfoFromArrays(gl, cover);
+            this.computeContour(renderer.contourError);
         }
     },
 
@@ -286,26 +263,6 @@ export default {
         }
 
         this.contour = new Float32Array(vertices);
-
-        // Update the arrays.
-        return {
-            contour: {
-                position: {
-                    numComponents: 2,
-                    data: vertices
-                }
-            },
-            cover: {
-                position: {
-                    numComponents: 2,
-                    data: [minX, minY, maxX, minY, maxX, maxY, minX, maxY]
-                },
-                indices: {
-                    numComponents: 3,
-                    data: [0, 1, 2, 2, 3, 0]
-                }
-            }
-        };
     },
 
     isShapeDirty() {
@@ -404,18 +361,41 @@ export default {
             });
 
             if (result) {
-                this.meshInfo = twgl.createBufferInfoFromArrays(gl, {
-                    position: {
-                        numComponents: 2,
-                        data: result.vertices
-                    },
-                    indices: {
-                        numComponents: 3,
-                        data: new Uint16Array(result.elements)
-                    }
-                });
-                if (!done) {
-                    done = true;
+                if (!this.meshInfo) {
+                    this.meshInfo = twgl.createBufferInfoFromArrays(gl, {
+                        position: {
+                            numComponents: 2,
+                            data: result.vertices
+                        },
+                        indices: {
+                            numComponents: 3,
+                            data: new Uint16Array(result.elements)
+                        }
+                    });
+                } else {
+                    const {
+                        meshInfo
+                    } = this;
+                    const {
+                        attribs
+                    } = meshInfo;
+                    const {
+                        position
+                    } = attribs;
+                    const {
+                        type,
+                        buffer
+                    } = position;
+                    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+                    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(result.vertices), gl.DYNAMIC_DRAW);
+
+                    const {
+                        indices
+                    } = meshInfo;
+
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+                    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(result.elements), gl.DYNAMIC_DRAW);
+                    meshInfo.numElements = result.elements.length;
                 }
             }
             tess.dispose();
@@ -447,5 +427,4 @@ export default {
     }
 }
 
-let done = false;
 const identity = m2d.init();
